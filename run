@@ -1,0 +1,65 @@
+#!/bin/bash
+
+cd /srv/www/bt/rt/
+
+BIN=./btrt.pl
+PID=btrt.pid
+TITLE=btrt
+
+case "$1" in
+   start)
+       echo "Starting $TITLE...";
+       if [ -f $PID ]; then
+          kill -0 `cat $PID` >/dev/null 2>&1
+          if [ "$?" == "0" ]; then
+              echo "$TITLE is already running!"
+          else
+              rm -rf $PID
+              $BIN > logs/`date +%Y-%m-%d_%H:%M:%S` 2>&1 &
+              echo $! > $PID
+              echo "PID file created"
+              echo "Started successfully"
+          fi
+       else
+          $BIN > logs/`date +%Y-%m-%d_%H:%M:%S` 2>&1 &
+          echo $! > $PID
+          echo "PID file created"
+          echo "Started successfully"
+       fi
+     ;;
+   stop)
+       echo "Stopping $TITLE..."
+       kill `cat $PID` >/dev/null 2>&1
+       if [ "$?" == "0" ]; then
+          rm -rf $PID
+          echo "Stopped successfully"
+       else
+          echo "$TITLE is not running!"
+       fi
+     ;;
+   restart)
+       echo "Restarting $TITLE..."
+       kill `cat $PID` >/dev/null 2>&1
+       if [ "$?" == "0" ]; then
+           rm -rf $PID
+           $BIN > logs/`date "+%Y-%m-%d_%H:%M:%S"`
+           echo $! > $PID
+           echo "PID file created"
+           echo "Restarted successfully"
+       else
+           echo "$TITLE is not started"
+           if [ -f $PID ]; then
+             rm -rf $PID
+           fi
+           $BIN > logs/`date "+%Y-%m-%d_%H:%M:%S"`
+           echo $! > $PID
+           echo "PID file created"
+           echo "Started successfully"
+       fi
+     ;;
+   *)
+       echo "Usage: ./run [ start | stop | restart ]"
+     ;;
+esac
+
+exit 0
