@@ -1,7 +1,7 @@
 #!/usr/bin/perl -T
 #
 # @package retracker.ivacuum.ru
-# @copyright (c) 2011 vacuum
+# @copyright (c) 2012 vacuum
 #
 use strict;
 no strict 'vars';
