@@ -5,8 +5,8 @@
 * Скопировать в подходящий каталог
 * chmod +x ./btrt.pl
 * chmod 0755 logs
-* Проверить наличие всех требуемых модулей для Perl (Digest::SHA1, EV,
-IO::Socket, POSIX, Time::HiRes)
+* Проверить наличие всех требуемых модулей для Perl (common::sense, Cache::Memcached::Fast, Digest::SHA1, EV,
+IO::Socket, JSON, POSIX, Time::HiRes)
 * В скрипте запуска ./run изменить путь на третьей строке
 * В ./btrt.pl изменить значения переменных $s_ip (0.0.0.0 - слушать на всех
 интерфейсах) и $s_port
@@ -24,8 +24,7 @@ IO::Socket, POSIX, Time::HiRes)
 * /stats - краткая статистическая информация
 
 Рабочий пример конфигурации retracker.local для веб-сервера nginx в файле
-retracker.local.nginx.conf. Требуется лишь сменить адрес bt.ivacuum.ru:2790
-на свой, который будет введен в переменные $s_ip и $s_port скрипта ./btrt.pl
+retracker.local.nginx.conf.
 
 Как настроить ретрекер у пользователей:
 
