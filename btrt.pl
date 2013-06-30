@@ -7,57 +7,45 @@ use common::sense;
 use Cache::Memcached::Fast;
 use Digest::SHA1 qw(sha1_hex);
 use EV;
+use Getopt::Long qw();
 use IO::Socket::INET qw(IPPROTO_TCP TCP_NODELAY SO_LINGER SO_REUSEADDR SOL_SOCKET);
 use Ivacuum::Utils;
 use Ivacuum::Utils::BitTorrent;
-use JSON qw(decode_json encode_json to_json);
+use JSON qw(encode_json to_json);
 require './functions.pm';
 
 # Отключение буферизации
 $| = 1;
 
-# Настройки
-my $s_accepted       = 0;
-my $s_complete_count = 0;
-my $s_ip             = '0.0.0.0';
-my $s_port           = 2790;
-my $s_memcached      = '/var/run/memcached/memcached.lock';
-my $s_starttime      = $^T;
+my($s_accepted, $s_complete_count, $s_starttime) = (0, 0, $^T);
 
+# Настройки
+my %g_args = ('dev' => 0);
 my %g_cfg = (
   'announce_interval' => 300,    # 5 минут
   'cache_expire'      => 360,    # announce_interval + 1 минута
   'cache_prefix'      => 'btrt_',
   'debug'             => 1,
   'expire_factor'     => 5,
+  'ip'                => '0.0.0.0',
   'max_numwant'       => 200,    # 200 пиров
+  'memcached'         => '/var/run/memcached/memcached.lock',
   'min_numwant'       => 50,     # 50 пиров
+  'port'              => 2790,
   'sitename'          => 'btrt',
 );
 my %g_files;
 my %g_peers;
 
-# Загрузка настроек
-{
-  local $/;
-  open my $fh, '<', './config.json';
-  my $json = <$fh>;
-  my $config = decode_json($json);
-  @g_cfg{keys %$config} = values %$config;
-}
+load_json_config('config.json', \%g_cfg);
+Getopt::Long::GetOptions(\%g_args, 'dev');
 
 # Особенные настройки для разрабатываемой версии
-if ($0 =~ /_dev/) {
+if ($g_args{'dev'}) {
   use Devel::Size qw(size total_size);
-  
   $Devel::Size::warn = 0;
-
-  $s_port++;
-  $g_cfg{'announce_interval'} = 60;
-  $g_cfg{'cache_expire'}      = 90;
-  $g_cfg{'cache_prefix'}     .= 'dev_';
-  $g_cfg{'expire_factor'}     = 2;
-  $g_cfg{'debug'}             = 2;
+  
+  load_json_config('config.dev.json', \%g_cfg);
 }
 
 Ivacuum::Utils::BitTorrent::set_announce_interval($g_cfg{'announce_interval'});
@@ -66,13 +54,31 @@ Ivacuum::Utils::set_sitename($g_cfg{'sitename'});
 
 my $ev_unixtime = int EV::now;
 
-# Принудительное завершение работы (INT: Ctrl+C, TERM: kill <pid>)
-my $sigint = EV::signal 'INT', sub { retracker_shutdown('SIGINT'); };
-my $sigterm = EV::signal 'TERM', sub { retracker_shutdown('SIGTERM'); };
+# Перезагрузка настроек
+my $sighup = EV::signal 'HUP', sub {
+  print_event('CORE', 'Получен сигнал: SIGHUP');
+  load_json_config('config.json', \%g_cfg);
+  load_json_config('config.dev.json', \%g_cfg) if $g_args{'dev'};
+  print_event('CORE', 'Настройки перезагружены');
+  
+  foreach my $key (keys %g_cfg) {
+    print_event('CFG', $key . ': ' . $g_cfg{$key});
+  }
+};
+
+# Принудительное завершение работы (Ctrl+C)
+my $sigint = EV::signal 'INT', sub {
+  retracker_shutdown('SIGINT');
+};
+
+# Принудительное завершение работы (kill <pid>)
+my $sigterm = EV::signal 'TERM', sub {
+  retracker_shutdown('SIGTERM');
+};
 
 # Подключение к memcached
 my $memcache = new Cache::Memcached::Fast({
-  'servers' => [{ 'address' => $s_memcached, 'noreply' => 1 }]
+  'servers' => [{ 'address' => $g_cfg{'memcached'}, 'noreply' => 1 }]
 });
 
 print_event('CORE', 'Подключение к memcached установлено');
@@ -90,8 +96,8 @@ $memcache->set($g_cfg{'cache_prefix'} . 'status', encode_json({
 # Создание сокета
 my $fh = IO::Socket::INET->new(
   'Proto'     => 'tcp',
-  'LocalAddr' => $s_ip,
-  'LocalPort' => $s_port,
+  'LocalAddr' => $g_cfg{'ip'},
+  'LocalPort' => $g_cfg{'port'},
   'Listen'    => 50000,
   'ReuseAddr' => SO_REUSEADDR,
   'Blocking'  => 0,
@@ -99,7 +105,7 @@ my $fh = IO::Socket::INET->new(
 setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, 1;
 setsockopt $fh, SOL_SOCKET, SO_LINGER, pack('II', 1, 0);
 setsockopt $fh, SOL_SOCKET, 0x1000, pack('Z16 Z240', 'httpready', '') if $^O eq 'freebsd';
-print_event('CORE', "Принимаем входящие пакеты по адресу $s_ip:$s_port");
+print_event('CORE', "Принимаем входящие пакеты по адресу $g_cfg{'ip'}:$g_cfg{'port'}");
 
 # Принимаем подключения
 my $event = EV::io $fh, EV::READ, sub {
@@ -249,7 +255,7 @@ my $event = EV::io $fh, EV::READ, sub {
       'interval'   => $g_cfg{'announce_interval'},
       'peers'      => $peers,
     });
-  } elsif (($g_cfg{'debug'} > 1 or substr($session->peerhost, 0, 10) eq '192.168.1.') and $s_input =~ /^GET \/dumper HTTP/) {
+  } elsif ($g_cfg{'debug'} > 1 and $s_input =~ /^GET \/dumper HTTP/) {
     # Дамп данных
     return html_msg($session, 'Дамп данных', '<h3>g_files [' . (scalar keys %g_files) . ']</h3><pre>' . to_json(\%g_files, { pretty => 1 }) . '</pre><h3>g_peers [' . (scalar keys %g_peers) . ']</h3><pre>' . to_json(\%g_peers, { pretty => 1 }) . '</pre>');
   } elsif ($s_input =~ /^GET \/stats HTTP/) {
