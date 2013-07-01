@@ -20,7 +20,6 @@ $| = 1;
 my($s_accepted, $s_complete_count, $s_starttime) = (0, 0, $^T);
 
 # Настройки
-my %g_args = ('dev' => 0);
 my %g_cfg = (
   'announce_interval' => 300,    # 5 минут
   'cache_expire'      => 360,    # announce_interval + 1 минута
@@ -35,22 +34,23 @@ my %g_cfg = (
   'sitename'          => 'btrt',
 );
 my %g_files;
+my %g_opt = ('dev' => 0);
 my %g_peers;
 
 load_json_config('config.json', \%g_cfg);
-Getopt::Long::GetOptions(\%g_args, 'dev');
+Getopt::Long::GetOptions(\%g_opt, 'dev');
 
 # Особенные настройки для разрабатываемой версии
-if ($g_args{'dev'}) {
+if ($g_opt{'dev'}) {
   use Devel::Size qw(size total_size);
   $Devel::Size::warn = 0;
   
   load_json_config('config.dev.json', \%g_cfg);
 }
 
-Ivacuum::Utils::BitTorrent::set_announce_interval($g_cfg{'announce_interval'});
-Ivacuum::Utils::set_debug_level($g_cfg{'debug'});
-Ivacuum::Utils::set_sitename($g_cfg{'sitename'});
+Ivacuum::Utils::BitTorrent::set_announce_interval(\$g_cfg{'announce_interval'});
+Ivacuum::Utils::set_debug_level(\$g_cfg{'debug'});
+Ivacuum::Utils::set_sitename(\$g_cfg{'sitename'});
 
 my $ev_unixtime = int EV::now;
 
@@ -58,7 +58,7 @@ my $ev_unixtime = int EV::now;
 my $sighup = EV::signal 'HUP', sub {
   print_event('CORE', 'Получен сигнал: SIGHUP');
   load_json_config('config.json', \%g_cfg);
-  load_json_config('config.dev.json', \%g_cfg) if $g_args{'dev'};
+  load_json_config('config.dev.json', \%g_cfg) if $g_opt{'dev'};
   print_event('CORE', 'Настройки перезагружены');
   
   foreach my $key (keys %g_cfg) {
