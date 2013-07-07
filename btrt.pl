@@ -48,9 +48,9 @@ if ($g_opt{'dev'}) {
   load_json_config('config.dev.json', \%g_cfg);
 }
 
-Ivacuum::Utils::BitTorrent::set_announce_interval(\$g_cfg{'announce_interval'});
-Ivacuum::Utils::set_debug_level(\$g_cfg{'debug'});
-Ivacuum::Utils::set_sitename(\$g_cfg{'sitename'});
+Ivacuum::Utils::BitTorrent::set_announce_interval($g_cfg{'announce_interval'});
+Ivacuum::Utils::set_debug_level($g_cfg{'debug'});
+Ivacuum::Utils::set_sitename($g_cfg{'sitename'});
 
 my $ev_unixtime = int EV::now;
 
@@ -59,6 +59,9 @@ my $sighup = EV::signal 'HUP', sub {
   print_event('CORE', 'Получен сигнал: SIGHUP');
   load_json_config('config.json', \%g_cfg);
   load_json_config('config.dev.json', \%g_cfg) if $g_opt{'dev'};
+  Ivacuum::Utils::BitTorrent::set_announce_interval($g_cfg{'announce_interval'});
+  Ivacuum::Utils::set_debug_level($g_cfg{'debug'});
+  Ivacuum::Utils::set_sitename($g_cfg{'sitename'});
   print_event('CORE', 'Настройки перезагружены');
   
   foreach my $key (keys %g_cfg) {
